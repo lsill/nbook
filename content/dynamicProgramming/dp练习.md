@@ -1,6 +1,6 @@
 ---
 title: "dp练习"
-date: 2021-12-03T18:19:15+08:00
+date: 2021-12-06T18:19:15+08:00
 draft: false
 ---
 
@@ -98,6 +98,45 @@ func UniquePathsWithObstacles3(obstacleGrid [][]int) int {
 		}
 	}
 	return arr[m-1][n-1]
+}
+```
+
+#### [343. 整数拆分](https://leetcode-cn.com/problems/integer-break/)
+
+这道题一言难尽
+
+首先还是套公式
+
+- 从题意可以得到数组dp
+- 由于n需要被当成数组下标，所以dp长度需要是n+1，dp[0] = 0, dp[1]=,dp[2]=2(因为1*1 < 2在被当乘数因子的时候会直接选择2),dp[3]=3（同理dp[2]）
+- 这道题最难的部分就是状态转移方程了，那么开始分解4,4可以分解成2+2和1+3,5可以分解成3+2和2+3那么可以得到状态转移方程dp[n] = dp[i-2]*dp[2] > dp[i-3] * dp[3] (其实可以把4拿出来省去-2的步骤，但我懒的在写了)
+- 遍历
+- 优化：其实可以不用动态规划做的，但因为做完是专项训练，思路没有打开，还是自己太菜
+
+解：(完全可以优化的)
+
+```
+func IntegerBreak(n int) int {
+	if n == 2 {
+		return 1
+	}
+	if n == 3 {
+		return 2
+	}
+	dp := make([]int, n+2)
+	dp[1] = 1
+	dp[2] = 2
+	dp[3] = 3
+	for i := 4; i <= n; i++ {
+		a2 := dp[i-2] * dp[2]
+		a3 := dp[i-3] * dp[3]
+		if a2 > a3 {
+			dp[i] = a2
+		} else {
+			dp[i] = a3
+		}
+	}
+	return dp[n]
 }
 ```
 
