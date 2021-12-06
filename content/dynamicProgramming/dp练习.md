@@ -43,3 +43,63 @@ func uniquePaths(m int, n int) int {
 
 #### [63. 不同路径 II](https://leetcode-cn.com/problems/unique-paths-ii/)
 
+这道题感觉一下子就难了好多，想了一段时间
+
+还是按照公式列出
+
+- 虽然给出了obstacleGrid二维数组，但有条件限制，还是在申请一个dp数组（给出的应该可以复用吧）
+- 已知obstacleGrid[i] [j] == 1的话，就是不可到达，那么obstacleGrid[0] [0] == 1就可以直接返回了，出发点无法到达，那么后面的都无法到达。
+- obstacleGrid[i] [j] ！= 1， 那么设置dp[0] [0] == 1,如果obstacleGrid[i] [j] == 0, 那么dp[i] [j] = 0。由出发点向右或者向下， 都只有一种可能性, dp[0] [j] = dp[0] [j-1],dp[i] [0] = dp[i-1] [0]。
+- 遍历
+- 写的比较糟糕，不好看 ，可以优化
+
+解：
+
+```
+func UniquePathsWithObstacles3(obstacleGrid [][]int) int {
+	m, n := len(obstacleGrid), len(obstacleGrid[0])
+	// 起点不可到达，直接返回
+	if obstacleGrid[0][0] == 1 {
+		return 0
+	}
+	// 构造dp数组
+	arr := make([][]int, m)
+	for i := 0; i < m; i++ {
+		arr[i] = make([]int, n)
+	}
+	// dp数组初始化，出发点只有一种可能性
+	arr[0][0] = 1
+	for i := 1; i < m; i++ {
+		if obstacleGrid[i][0] == 1 {
+			// 遇到障碍物直接返回
+			arr[i][0] = 1
+			break
+		}
+		// 只有一种走法
+		arr[i][0] = arr[i-1][0]
+	}
+	for i := 1; i < n; i++ {
+		if obstacleGrid[0][i] == 1 {
+			// 遇到障碍物直接返回
+			arr[0][i] = 0
+			break
+		}
+		// 只有一种走法
+		arr[0][i] = 1
+	}
+	// 遍历
+	for i := 1; i < m; i++ {
+		for j := 1; j < n; j++ {
+			if obstacleGrid[i][j] == 1 {
+				arr[i][j] = 0
+				continue
+			}
+			arr[i][j] = arr[i][j-1] + arr[i-1][j]
+		}
+	}
+	return arr[m-1][n-1]
+}
+```
+
+
+
