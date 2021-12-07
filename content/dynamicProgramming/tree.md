@@ -1,5 +1,5 @@
 ---
-title: "dp练习"
+title: "dp树相关练习"
 date: 2021-12-07T14:19:15+08:00
 draft: false
 ---
@@ -10,7 +10,7 @@ draft: false
 
 上图
 
-![lc96](www.lsill.com\static\images\lc\lc96.png)
+![lc96.png](https://github.com/lsill/nbook/blob/main/static/images/lc/lc96.png?raw=true)
 
 套公式
 
