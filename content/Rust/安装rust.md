@@ -10,11 +10,11 @@ draft: true
 
 打开后 选择默认选项即可
 
-![install_option](E:\github\nbook\static\images\rust\install_option.PNG)
+![install_option](https://github.com/lsill/nbook/blob/main/static/images/rust/install_option.PNG?raw=true)
 
 安装成功
 
-![r_ins_suc](E:\github\nbook\static\images\rust\r_ins_suc.PNG)
+![r_ins_suc](https://github.com/lsill/nbook/blob/main/static/images/rust/r_ins_suc.PNG?raw=true)
 
 默认路径一般是C:\Users\用户名\\.cargo
 
@@ -22,7 +22,7 @@ draft: true
 
 输入rustc --version
 
-![ru_ver_su](E:\github\nbook\static\images\rust\ru_ver_su.png)
+![ru_ver_su](https://github.com/lsill/nbook/blob/main/static/images/rust/ru_ver_su.png?raw=true)
 
 找个喜欢的目录建立一个main.rs文件
 
@@ -34,7 +34,7 @@ fn main() {
 
 执行下面命令输入就完全安装成功了
 
-![r_hw_suc](E:\github\nbook\static\images\rust\r_hw_suc.PNG)
+![r_hw_suc](https://github.com/lsill/nbook/blob/main/static/images/rust/r_hw_suc.PNG?raw=true)
 
 ### 2. linux安装 // TODO 
 
