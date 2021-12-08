@@ -1,7 +1,7 @@
 ---
 title: "rust安装"
 date: 2021-12-08T15:19:15+08:00
-draft: true
+draft: false
 ---
 
 ### 1. window 安装
