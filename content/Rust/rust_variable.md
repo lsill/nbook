@@ -25,7 +25,7 @@ fn main() {
 
 cargo run显示的报错
 
-![rust_var_1](E:\github\nbook\static\images\rust\rust_var_1.PNG)
+![rust_var_1](https://github.com/lsill/nbook/blob/main/static/images/rust/rust_var_1.PNG?raw=true)
 
 不能对不可变的变量二次赋值。。（好不习惯啊）
 
@@ -47,7 +47,7 @@ fn main() {
 
 cargo run 运行结果
 
-![rust_var_1_succ](E:\github\nbook\static\images\rust\rust_var_1_succ.PNG)
+![rust_var_1_succ](https://github.com/lsill/nbook/blob/main/static/images/rust/rust_var_1_succ.PNG?raw=true)
 
 **原文对于变量什么时候使用mut什么时候不使用是这样描述的：**
 
@@ -84,7 +84,7 @@ fn main() {
 
 上面的代码常量THREE_HOURS_IN_SECONDS定义没有被使用，讲道理是不该被编译过得，但可以被编译过，不过会打印出警告的日志，警告常量THREE_HOURS_IN_SECONDS是一个dead_code
 
-![rust_var_const](E:\github\nbook\static\images\rust\rust_var_const.PNG)
+![rust_var_const](https://github.com/lsill/nbook/blob/main/static/images/rust/rust_var_const.PNG?raw=true)
 
 ### 3.变量的隐藏
 
@@ -102,7 +102,7 @@ fn main() {
 
 输出值：
 
-![rust_var_shadowing1](E:\github\nbook\static\images\rust\rust_var_shadowing1.PNG)
+![rust_var_shadowing1](https://github.com/lsill/nbook/blob/main/static/images/rust/rust_var_shadowing1.PNG?raw=true)
 
 看起来就像一些语言的作用域，同名变量在不同作用域下上层作用域的值会被隐藏
 
