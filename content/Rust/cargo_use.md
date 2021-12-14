@@ -22,9 +22,7 @@ draft: false
 
 - 创建工程 (cargo new hello_cargo)
 
-- 
-
-- ![cargo_create](E:\github\nbook\static\images\rust\cargo_create.PNG)
+  ![cargo_create](https://github.com/lsill/nbook/blob/main/static/images/rust/cargo_create.PNG?raw=true)
 
   ​	在hello_cargo中可以看到里面存放了一个Cargo.toml文件，一个src文件夹，一个.git(git仓库)，一个.gitignore（git忽视），直接创建了git工程是真的方便。
 
