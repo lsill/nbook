@@ -18,7 +18,7 @@ draft: false
 
 ### 1.满二叉树
 
-![tree_man](E:\github\nbook\static\images\tree\tree_man.png)
+![tree_man](https://github.com/lsill/nbook/blob/main/static/images/tree/tree_man.png?raw=true)
 
 如图所示，叶节点数全为0或者全为2的节点，并且所有叶节点数为0的节点都在同一层，这颗二叉树就是满二叉树，假设深度为k，则有**2^k-1**节点的二叉树
 
@@ -32,7 +32,7 @@ draft: false
 
 ### 2.完全二叉树
 
-![tree_woner](E:\github\nbook\static\images\tree\tree_wonder.png)
+![tree_woner](https://github.com/lsill/nbook/blob/main/static/images/tree/tree_wonder.png?raw=true)
 
 ​	完全二叉树：除了最底层节点可能没填满外，其余层节点数都达到最大值，并且左边节点为空的情况下，右边节点不能有值，必须先填满子树，才可以填右子树。最底层是第h层，则h层包含**1~2^h-1个节点**。
 
@@ -48,7 +48,7 @@ draft: false
 
 ### 3.二叉搜索树
 
-![tree_search](E:\github\nbook\static\images\tree\tree_search.png)
+![tree_search](https://github.com/lsill/nbook/blob/main/static/images/tree/tree_search.png?raw=true)
 
 
 
@@ -67,7 +67,7 @@ draft: false
 
 ​	平衡二叉搜索树：又被称为AVL（Adelson-Velsky and Landis）树，且具有以下性质：它是一棵空树或它的左右两个子树的高度差的绝对值不超过1，并且左右两个子树都是一棵平衡二叉树。
 
-![tree_balance_search](E:\github\nbook\static\images\tree\tree_balance_search.png)
+![tree_balance_search](https://github.com/lsill/nbook/blob/main/static/images/tree/tree_balance_search.png?raw=true)
 
 如图所示如果是平衡二叉搜索树必须满足以下几点：
 
@@ -92,7 +92,7 @@ c++的map、set、multimap、multiset的底层实现都是平衡二叉搜索树�
 
 如图所示：
 
-![tree_point](E:\github\nbook\static\images\tree\tree_point.png)
+![tree_point](https://github.com/lsill/nbook/blob/main/static/images/tree/tree_point.png?raw=true)
 
 通过存储左右节点的地址，来访问左右节点，如果没有左右节点，值为nil。
 
@@ -106,7 +106,7 @@ c++的map、set、multimap、multiset的底层实现都是平衡二叉搜索树�
 
 如图所示：
 
-![tree_array](E:\github\nbook\static\images\tree\tree_array.png)
+![tree_array](https://github.com/lsill/nbook/blob/main/static/images/tree/tree_array.png?raw=true)
 
 - 数组表示的二叉树索引id为0的一定是二叉树的根节点
 - 如果父节点的下标是i,那么左节点的下标就是 i * 2 + 1，右节点的下标是  i * 2 + 2
