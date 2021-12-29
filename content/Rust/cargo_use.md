@@ -65,11 +65,11 @@ draft: false
 
   ​	检查代码写的对不对
 
-- 创建release版本 （go build --release）
+- 创建release版本 （cargo build --release）
 
   这个创建release是真不错，发行版和开发分开，也省的在创建新的分支了
 
-- 格式化代码(rustc fmt)
+- 格式化代码(rustcfmt)
 
   ​	不格式化代码的话可能要解决一堆空格冲突问题
 
