@@ -38,7 +38,7 @@ func main() {
 
 输入go vet test1.go
 
-![struct_nocopy](E:\github\nbook\static\images\golang\struct_nocopy.PNG)
+![struct_nocopy](https://github.com/lsill/nbook/blob/main/static/images/golang/struct_nocopy.PNG?raw=true)
 
 上面写着因为sync.WaitGroup包含 sync.noCopy,所以无法进行锁的值拷贝。
 
@@ -99,7 +99,7 @@ func (*noCopy) Unlock() {}
 
 这么写运行是没有问题，但在go vet的时候就会输出:
 
-![struct_nocopy_1](E:\github\nbook\static\images\golang\struct_nocopy_1.PNG)
+![struct_nocopy_1](https://github.com/lsill/nbook/blob/main/static/images/golang/struct_nocopy_1.PNG?raw=true)
 
 好像只能在检查时候才能做到不允许拷贝的操作。
 
@@ -135,7 +135,7 @@ type Test1 struct {
 
 输出：
 
-![struct_nocopy_2](E:\github\nbook\static\images\golang\struct_nocopy_2.PNG)
+![struct_nocopy_2](https://github.com/lsill/nbook/blob/main/static/images/golang/struct_nocopy_2.PNG?raw=true)
 
 **作用**：用这个的话，可以在go vet期间发现值拷贝导致没有正确修改传递的结构体的值。在实际项目中有很多传参，不一定什么时候就传错了，可以记下。而且**空结构体不占据任何空间，不会对性能有任何影响。**
 
