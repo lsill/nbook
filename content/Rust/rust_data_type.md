@@ -71,7 +71,7 @@ fn main() {
 
 结果：
 
-![data_type_cal](E:\github\nbook\static\images\rust\data_type_cal.PNG)
+![data_type_cal](https://github.com/lsill/nbook/blob/main/static/images/rust/data_type_cal.PNG?raw=true)
 
 
 
