@@ -88,7 +88,7 @@ func main() {
 
 ​	我们模拟 5 个用户并发访问，同时获取 ID=1 的文章，因为缓存中不存在，因此都到后端 DB 获取具体数据。从运行结果可以看出这一点：
 
-![single_flight_1](E:\github\nbook\static\images\golang\single_flight_1.PNG)
+![single_flight_1](https://github.com/lsill/nbook/blob/main/static/images/golang/single_flight_1.PNG?raw=true)
 
 ​	从结果看访问了5此db，不是我们想要的
 
@@ -152,7 +152,7 @@ func (g *Group) Forget(key string)
 
 运行后，结果如下：
 
-![single_flight_2PNG](E:\github\nbook\static\images\golang\single_flight_2PNG.PNG)
+![single_flight_2PNG](https://github.com/lsill/nbook/blob/main/static/images/golang/single_flight_2PNG.PNG?raw=true)
 
 和预期一样，`findArticleFromDB` 只执行了一次，shared 的值也表示结果被多个调用者共享。
 
