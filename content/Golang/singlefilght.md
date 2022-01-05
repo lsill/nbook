@@ -201,3 +201,8 @@ func (g *Group) Forget(key string)
 `singleflight` 很常用，你在 `pkg.go.dev` 搜索 `singleflight`，发现有很多轮子：https://pkg.go.dev/search?q=singleflight，好些项目不是使用官方的 `golang.org/x/sync/singleflight`，而是自己实现一个，不过这些实现基本只实现了最常用的 Do 方法。感兴趣的可以查看他们的实现。
 
 下次项目中需要类似功能，记得使用 `singleflight` 哦！
+
+
+
+[原文连接](https://mp.weixin.qq.com/s/zwTErb_kiEEsurscYQ6eRw)
+
