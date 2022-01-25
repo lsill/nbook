@@ -28,7 +28,7 @@ draft: true
 
 流程图如下：
 
-![match](/Users/lsill/Documents/match_pic.png)
+![match](https://github.com/lsill/nbook/blob/main/static/images/programming/match_pic.png?raw=true)
 
 	在寻找队友的过程中，我们一般考虑的是还需要多少个人才能开始这句游戏。
 
