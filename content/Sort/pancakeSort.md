@@ -43,7 +43,7 @@ leetcode 举例子的解不太容易能引导出正确解
 
 图解：
 
-![pancake](/Users/lsill/gitclone/nbook/static/images/sort/pancake.png)
+![pancake](https://github.com/lsill/nbook/blob/dev/static/images/sort/pancake.png?raw=true)
 
 
 
