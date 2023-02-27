@@ -2,3 +2,4 @@ config.toml
 hugo
 .hugo_build.lock
 themes
+.idea/*
