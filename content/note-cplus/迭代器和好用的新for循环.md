@@ -101,3 +101,87 @@ class istream_line_reader {
 - pointer是迭代器指向的对象的指针类型，这儿就平淡无奇的定义为value_type的常指针了（不希望别人来更改指针的内容）。
 - 类似的，reference是value_type的常引用。
 - iterator_category被定义为input_iterator_tag，标识这个迭代器的类型是input_iterator（输入迭代器）
+
+作为一个真的只能读一次的输入迭代器，有个特殊的麻烦（前向迭代器或其衍生类型没有）：到底应该让 * 负责读取还是 ++ 负责读取。我们这儿采用常见、也较为简单的做法，让 ++ 负责读取，* 负责返回读取的内容（这个做法会有些副作用，但按我们目前的用法则没有问题）。这样的话，这个 iterator 类需要有一个数据成员指向输入流，一个数据成员来存放读取的结果。根据这个思路，我们定义这个类的基本成员函数和数据成员：
+```c++
+class istream_line_reader {
+public:
+  class iterator {
+    …
+    iterator() noexcept
+      : stream_(nullptr) {} // 默认构造函数，将 stream_ 清空
+    explicit iterator(istream& is)  // 根据传入的输入流来这是stream_
+      : stream_(&is)
+    {
+      ++*this;
+    }
+    reference operator*() const noexcept
+    {
+      return line_;
+    }
+    pointer operator->() const noexcept
+    {
+      return &line_;
+    }
+    iterator& operator++()  // ++来读取输入流的内容
+    {
+      getline(*stream_, line_);
+      if (!*stream_) {
+        stream_ = nullptr;
+      }
+      return *this;
+    }
+    iterator operator++(int)    // 后置++则以惯常方式使用前置++和拷贝构造来实现
+    {
+      iterator temp(*this);
+      ++*this;
+      return temp;
+    }
+  private:
+    istream* stream_;
+    string line_;
+  };
+  …
+};
+```
+定义了默认的构造函数，将steam_清空；相应的，在带参数的构造函数里，根据传入的输入流来这是stream_。定义了*和->运算符来取的迭代器指向的文本的引用和指针，并用++来读取输入流的内容（后置++则以惯常方式使用前置++和拷贝构造来实现）。唯一“特别”的地方，是在构造函数里调用了++，确保在构造函数调用*运算符时可以读取内容，符合日常先使用*再使用++的习惯。一旦文件读取到尾部（或出错），则stream_被清空，回到默认构造的情况。
+对于迭代器之间的比较，我们则主要考虑文件有没有读到尾部的情况，简单定义为：
+```c++
+  bool operator==(const iterator& rhs)
+      const noexcept
+    {
+      return stream_ == rhs.stream_;
+    }
+    bool operator!=(const iterator& rhs)
+      const noexcept
+    {
+      return !operator==(rhs);
+    }
+```
+有了这个 iterator 的定义后，istream_line_reader 的定义就简单得很了：
+```c++
+class istream_line_reader {
+public:
+  class iterator {…};
+  istream_line_reader() noexcept
+    : stream_(nullptr) {}
+  explicit istream_line_reader(
+    istream& is) noexcept
+    : stream_(&is) {}
+  iterator begin()
+  {
+    return iterator(*stream_);
+  }   iterator end() const noexcept
+  {
+    return iterator();
+  }
+private:
+  istream* stream_;
+};
+```
+也就是说，构造函数只是简单的把输入流的指针赋值给stream_成员变量。begin成员函数则负责构造一个真正有意义的迭代器；end成员函数则只是返回一个默认构造函数的迭代器。
+
+### 思考
+1. 目前这个输入行迭代器的行为，在什么情况下可能导致意料之外的后果？
+
+2. 请尝试一下改进这个输入行迭代器，看看能不能消除这种意外。如果可以，该怎么做？如果不可以，为什么？
