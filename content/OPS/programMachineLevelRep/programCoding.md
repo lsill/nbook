@@ -438,3 +438,360 @@ arith:
 2. 将寄存器%rdx设置为0的更直接方式是指令moveq $0,%rdx
 3. 使用xorq的版本只需要3个字节，而使用movq的版本需要7个字节。其他将%rdx设置为0的方法都依赖于这样一个属性，
 即任何更新低于4字节的指令都会把高位字节设置为0.因此可以使用xorl %edx, %edx(2字节)或movl $0,%edx(5字节)
+
+### 5. 特殊的算术操作
+两个64位有符号或无符号整数相乘得到的乘积需要128位来表示。（16字节，8字）
+
+| 指令      | 效果                                                        | 描述     |
+|---------|-----------------------------------------------------------|--------|
+| imulq S | S*R[%rax]->R[%rdx]:R[%rax]                                | 有符号全乘法 |
+| mulq S  | S*R[%rax]->R[%rdx]:R[%rax]                                | 无符号全乘法 |
+| clto    | 符号扩展（R[%rax]）->R[%rdx]:R[%rax]                            | 转换为八字  |
+| idivq S | R[%rdx]:R[%rax] mod S->R[%rdx],R[%rdx]:R[%rax]/S->R[%rdx] | 有符号除法  |
+| divq S  | R[%rdx]:R[%rax] mod S->R[%rdx],R[%rdx]:R[%rax]/S->R[%rdx] | 无符号除法  |
+
+x86-64指令集提供了两条不同的“单操作数”乘法指令，以计算64位值的全128位乘积————一个是无符号乘法（mulq），
+另一个是补码乘法(imulq)。这两条指令都要求一个参数必须在寄存器%rax中，而另一个作为指令的源操作数给出。
+然后乘积存放在寄存器%rdx(高64位)和%rax(低64位)中。虽然imulq这个名字可以用于两个不同的乘法操作，但是
+汇编器能够通过计算操作数的数目，分辨出想用哪条指令。
+
+```c++
+#include <inttypes.h>
+
+// GCC提供的128位整数支持
+typedef unsigned __int128 uint128_t;
+// 显示的把x和y声明为64位的数字
+void store_uprod(uint128_t *dest, uint64_t x, uint64_t y){
+  *dest = x * (uint128_t)y;
+}
+```
+GCC生成的汇编代码 %rax 返回值 %rsi第二个参数 %rdx 第三个参数 %rdi 第一个参数
+```
+void store_uprod(uint128_t *dest, uint64_t x, uint64_t y)
+dest in %rdi, x in %rsi, y in %rdx
+store_uprod:
+  movq %rsi, %rax     // copy x to multiplicand
+  mulq %rdx           // multiply by y
+  movq %rax, (%rdi)   // store lower 8 bytes at dest
+  movq %rdx, 8(%rdi)  // store upper 8 bytes at dest+8
+  ret
+```
+
+x86-86实现除法
+```c++
+void remdiv(long x, long y,long *p, long *rp) {
+  long q = x/y; 
+  long r = x%y;
+  *qp =q; 
+  *rp = r;
+}
+```
+汇编代码 %rax 返回值 %rsi第二个参数 %rdx 第三个参数 %rdi 第一个参数 %r8第五个参数
+```
+void remdiv(long x, long y, long *qp, long *rp)
+x in %rdi,y in %rsi,qp in %rdx,rp in %rcx
+remdiv:
+  movq  %rdx, %r8   // copy qp
+  movq  %rdi, %rax  // move x to lower 8 bytes of divi
+  cqto              // sign-extend to upper 8 bytes of dividend
+  idviq %rsi        // divide by y
+  movq  %rax, (%r8) // store quotient at qp
+  movq  %rdx, (%rcx)  // store remainder at rp
+  ret
+```
+上述代码中
+第二行：把参数qp保存到另外一个寄存器中%r8，因为除数操作要使用参数寄存器%rdx
+第三四行：准备被除数，复制并符号扩展x，存放在%rax和%rdx中
+第五行：除以y
+第六行：寄存器%rax的商保留在qp
+第七行：寄存器%rdx中的余数被保存在rp商
+（通常寄存器%rdx会事先设置成0）
+
+### 6. 控制
+jump指令可以改变一组机器代码指令的执行顺序，jump指令指定控制应该被传递到程序的某个其他部分
+
+#### 1. 条件码
+除了整数寄存器，CPU还维护着一组单个位的`条件码（condition code）`寄存器，它们描述了最近的算术或逻辑操作
+的属性。可以检测这些寄存器来执行条件分支指令。最常用的条件码有：
+- CF:进位标志。最近的操作使最高位产生了进位。可用来检查无符号操作的溢出。
+- ZF:零标志。最近的操作得出的结果位0.
+- SF：符号标志。最近的操作得到的结果位负数。
+- OF：溢出标志。最近的操作导致一个补码溢出————正溢出或负溢出。
+
+比如，用一条add指令完成等价于t=a+b的功能(a,b,t都是整形)，根据c表达式来设置条件码
+CF: (unsigned) t < (unsigned) a 无符号溢出
+ZF: （t==0）  零
+SF:  (t < 0)  负数
+OF （a<0==b<0） && (t<0 != a < 0) 有符号溢出
+
+leaq指令不改变任何条件码，因为它是用来进制地址计算的。
+INC、DEC、NEG、NOT、ADD、SUB、IMUL、XOR、OR、AND、SAL、SHL、SAR、SHR 都会设置条件码。
+例如：XOR，进位标志和溢出标志都会设置成0。移位操作进位标志将设置为最后一个被移除的位，而溢出标志设置0.
+INC和DEC指令会设置溢出和零标志，但是不会改变进位标志。
+
+CMP指令根据两个操作数之差来设置条件码。除了只设置条件码而不更新目的寄存器之外，cmp指令和sub指令的行为是一样的。
+test指令的行为与and指令一样，除了它们只设置条件码而不改变目的寄存器的值。
+典型的用法是，两个操作数是一样的（例如 testq %rax, %rax用来检查%rax时负数、零、还是整数），或者其中一个操作数
+是一个掩码，用来指示哪些位应该被测试。
+
+| 指令         | 基于    | 描述   |
+|------------|-------|------|
+| CMP S1, S2 | S2-S1 | 比较   |
+| cmpb       |       | 比较字节 |
+| cmpw       |       | 比较字  |
+| cmpl       |       | 比较双字 |
+| cmpq       |       | 比较四字 |
+| TEST S1,S2 | S1&S2 | 测试   |
+| testb      |       | 测试字节 |
+| testw      |       | 测试字  |
+| testl      |       | 测试双字 |
+| testq      |       | 测试四字 |
+
+
+#### 2. 访问条件码
+条件码通常不会被直接读取，常用的使用方法有三种
+1. 可以根据条件码的某种组合将1个字节设置为0或1
+2. 可以根据跳转到程序的某个其他的部分
+3. 可以有条件地传送数据
+
+将这一整类指令成为SET指令；它们之间的区别就在于它们考虑的条件码组合是什么，这些指令名字的不同后缀指明了
+它们所考虑的条件码的组合。这些指令的后缀表示不同的条件，而不是操作数大小。
+一条set指令的目的操作数是低位单字节寄存器元素之一，或是一个字节的内存位置，指令会将这个字节设置成0或者1。
+为了得到一个32位或64位结果，我们必须对高位清零。一个c语言表达式a<b的典型指令序列如下所示，这里
+a和b都是long类型
+
+| 指令      | 同义名    | 效果                | 设置条件         |
+|---------|--------|-------------------|--------------|
+| sete D  | setz   | D<-ZF             | 相等/零         |
+| setne D | setnz  | D<-~ZF            | 不等/非零        |
+| sets D  |        | D<-SF             | 负数           |
+| setns D |        | D<-~SF            | 非负数          |
+| setg D  | setnle | D<-~(SF^OF) & ~ZF | 大于（有符号>）     |
+| setge D | setnge | D<-~(DF^OF)       | 大于等于（有符号>=）  |
+| setl D  | setnge | D<-SF^OF          | 小于（有符号<）     |
+| setle D | setnge | D<-(SF^OF)或ZF     | 小于等于（有符号<=）  |
+| seta D  | setnbe | D<-~CF&~ZF        | 超过（无符号>）     |
+| setae D | setnb  | D<-~CF            | 超过或相等(无符号>=) |
+| setb  D | setnae | D<-CF             | 低于（无符号<）     |
+| setbe   | setna  | D<-CF或ZF          | 低于或等于（无符号<=） |
+
+set指令。每条指令根据条件码的某种组合，将一个字节设置为0或1.这些指令有“同义名”，也就是同一条机器指令有别的名字。
+
+汇编代码
+```
+int comp(data_t a, data_t b)
+a in &rdi,b in %rsi
+comp:
+  comp %rsi, %rdi   // compare a:b
+  setl %al          // set low-order byte of %eax to 0 or 1
+  movzbl %al, %eax  // clear rest of %rax(and rest of %rax)
+  ret
+```
+注意：
+comp %rsi, %rdi 虽然参数列出的顺序是%rsi(b)再是%rdi(a)，实际上比较的是a和b。
+movzbl 进行0扩展，不仅会吧%rax的高三个字节清零，还会把整个寄存器%rax的高4个字节都清零。
+
+#### 3. 跳转指令
+跳转`jump`指令到到导致执行切换到程序中一个全新的位置，在汇编代码中，这些跳转的目的通常用一个标号指明
+(人为编造的汇编代码)
+```
+movq $0, %rax   // set %rax to 0
+jmp .L1         // goto .L1
+movq (%rax), %rdx // null pointer dereference(skipped)
+.L1:
+popq %rdx     // jump target
+```
+指令jmp .L1会导致程序跳过movq指令，而从popq指令开始继续执行。
+- 直接跳转 jump .L1 ： 跳转目标作为指令的一部分编码
+- 间接跳转寄存器中读出 jmp *%：用寄存器%rax的值作为跳转目标
+- 间接跳转内存中读出  kmp *(%rax)：以%rax的值作为读地址，从内存读出跳转目标
+
+| 指令           | 同义名  | 跳转条件         | 描述           |
+|--------------|------|--------------|--------------|
+| jmp Label    |      | 1            | 直接跳转         |
+| jmp *Operand |      | 1            | 间接跳转         |
+| je Label     | jz   | ZF           | 相等           |
+| jne Label    | jnz  | ~ZF          | 不等           |
+| js Label     |      | SF           | 负数           |
+| jns Label    |      | ~SF          | 非负数          |
+| jg Label     | jnle | ~(DF^OF)&~ZF | 大于（有符号>）     |
+| jge Label    | jnl  | ~(SF^OF)     | 大于或等于（有符号>=） |
+| jl Label     | jnge | SF^OF        | 小于（有符号<）     |
+| jle Label    | jng  | (SF^OF)或 ZF  | 小于或等于(有符号<=) |
+| ja  Label    | jnbe | ~CF&~ZF      | 超过（无符号>）     |
+| jae Label    | jnb  | ~CF          | 超过或相等（无符号>=） |
+| jb  Label    | jnae | CF           | 低于(无符号<)     |
+| jbe Label    | jna  | CF或ZF        | 低于或相等（无符号<=） |
+
+jump指令。当条件满足时，这些指令会跳转到一条带标号的目的地。有些指令有“同义名”。
+
+这些指令的名字和跳转条件与set指令的名字和设置条件相匹配额。条件跳转只能是直接跳转。
+
+#### 4. 跳转编令的编码
+在汇编代码中，跳转目标用符号标号书写。汇编器以及后来的链接器，会产生调整目标的适当编码。
+跳转指令有几种不同的编码。
+- 最常用的都是PC相对的（PC-relative）。也就是，它们会将目标指令的地址与紧跟在跳转指令后面那条指令的地址
+之间的差位编码。这个地址偏移量可以编码位1、2或4个字节。
+- 第二种编码方法是给出“绝对”地址，用4个字节直接指定目标。
+
+编译器和链接器会选择适当的跳转目的编码。
+
+PC相对寻址的例子，包含两个跳转，2行的jmp指令前向跳转到更高的地址，而7行的jg指令后向跳转到较低的地址。
+```
+  moveq %rdi, %rax
+  jmp .L2
+.L3:
+  sarq  %rax
+.L2:
+  testq %rax, %rax
+  jg  .L3
+  req;ret
+```
+
+汇编器产生的.o格式的反汇编版本如下
+```
+1   0:  48 89 f8    mov %rdi,%rax
+2   3:  eb 03       jmp 8 <loop+0x8> // 03（pc相对寻址数） + 5(下一行的地址)
+3   5:  48 d1 f8    sar %rax
+4   8:  48 85 c0    test %rax,%rax
+5   b:  7f f8       jg 5 <loop+0x5> // f8(目标用单字节、补码表示为-8)+0xd(13)
+6   d:  f3 c3       repz retq
+```
+
+```
+1   4004d0:  48 89 f8    mov %rdi,%rax
+2   4004d3:  eb 03       jmp 4004d8 <loop+0x8> 
+3   4004d5:  48 d1 f8    sar %rax
+4   4004d8:  48 85 c0    test %rax,%rax
+5   4004db:  7f f8       jg 4004d5 <loop+0x5> 
+6   4004dd:  f3 c3       repz retq
+```
+
+#### 5. 用条件控制来实现条件分支
+将条件表达式和语句从C 语言翻译成机器代码，最常用的方式是结合有条件和无条件 跳转。
+(另一种方式在 6.6 节中会看到，有些条件可以用数据的条件转移实现，而不是 用控制的条件转移来实现。)
+例如，a 给出了一个计算两数之差绝对值的两数的C 代码。
+这个两数有一个副作用，会增加两个计数器，编码为全局变量1t cat和ge cnt 之 一。
+GCC 产生的汇编代码如c 所示。把这个机器代码再转换成C 语言，我们称之为 函数got odiff_se(b)。
+它使用了C语言中的got。语句，这个语句类似于汇编代 码中的无条件跳转。使用got 。
+语句通常认为是一种不好的编程风格，因为它会使代码非常难以阅读和调试。本文中使用goto 语句，
+是为了构造描述汇编代码程序控制流的C程序。我们称这样的编程风格为“goto代码”。
+在 goto代码中(b)， 第5行中的gotox_ge_y语句会导致跳转到第9行中的标号xge_y处(当x>=y，时会进行跳转)。
+从这一点继续执行，完成函数absdiff_se的else部分并返回。
+另一方面，如果测试x>=y失败，程序会计算absdiff_se的if部分指定的步骤并返回。
+汇编代码的实现(c) 首先比较了两个操作数(第2行)，设置条件码。
+如果比较的结果表明工大于或者等于，那么它就会跳转到第8行，增加全局变量ge_cnt计算x - y作为返回值并返回。
+由此我们可以看到absdiff_se对应汇编代码的控制流非常类似于gotodiff_se的goto代码。
+a 源氏c代码
+```c
+long lt_cnt = 0;
+long ge_cnt = 0;
+long absdiff_se(long x, long y)
+{
+  long result;
+  if (x > y){
+    it_cnt++;
+    result = y - x;
+  } else {
+    ge_cnt++;
+    result = x - y;
+  }
+  return result;
+}
+```
+b 等价的goto版本（模拟了汇编代码的控制）
+```c
+long gotodiff_se(long x, long y)
+{
+  long result;
+  if (x >= y)
+    goto x_ge_y;
+   lt_cnt++;
+   result = y - x;
+   return result;
+  x_ge_y:
+    ge_cnt++;
+    result = x - y;
+    return result;
+}
+```
+c 产生的汇编代码 %rip是计数器
+```c
+long absdiff_se(long x, long y)
+x in %rdi, y in %rsi
+absdiff_se:
+  cmpq  %rsi, %rdi    // compare x:y
+  jge   .L2           // if >= goto x_ge_y
+  addq  $1, lt_cnt(%rip)  // lt_cnt++
+  movq  %rsi, %rax
+  subq  %rdi, %rax    // result = y - x
+  ret
+.L2:
+  addq  $1, ge_cnt(%rip)  // ge_cnt++
+  movq  %rdi, %rax
+  subq  %rsi, %rax        // result = x - y
+  ret       
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
