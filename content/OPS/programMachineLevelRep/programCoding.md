@@ -733,6 +733,291 @@ absdiff_se:
   ret       
 ```
 
+#### 6. 用条件传送来实现条件分支
+实现条件操作的传统方法是通过使用控制的条件转移。 当条件满足时，程序沿着一条 执行路径执行，
+而当条件不满足时，就走另一条路径。这种机制简单而通用，但是在现代 处理器上，它可能会非常低效。
+
+一种替代的策略是使用数据的条件转移。
+这种方法计算一个条件操作的两种结果，然 后再根据条件是否满足从中选取一个。 
+只有在一些受限制的情况中，这种策略 才可行，但 是如果可行，
+就可以用一条简单的条件传送指令来实现它，条件传送指 令更符合现代处理 器的性能特性
+
+a 条件传送编译的实力代码
+```c++
+long absdiff(long x, long y)
+{
+  long result;
+  if (x < y)
+    result = y - x;
+   else 
+    result = x - y;
+   return result;
+}
+```
+b 使用条件赋值的实现
+```c++
+long cmovdiff(long x, long y)
+{
+  long rval = y - x;
+  long eval = x - y;
+  long ntest = x >= y;
+  /* Line below requires single instruction */
+  if (ntest) rval = eval;
+  return rval;
+}
+```
+c a产生的汇编代码  %rdx第三个参数
+```
+long absdiff(long x, long y)
+x in %rdi, y in %rsi
+absdiff:
+  movq  %rsi, %rax
+  subq  %rdi, %rax  // rval = y - x
+  movq  %rdi, %rdx
+  subq  %rsi, %rdx  // eval = x - y
+  cmpq  %rsi, %rdi
+  cmovge  %rdx, rax // if >=,rval = eval
+  ret           // return tval
+```
+
+处理器通过使用流水线(pipelining )来获得高性能，在流水线中，一条指令的处理要经过一系列的阶段，
+每个阶段执行所需操作的一小部分(例如，从内存取指令、确定指令类型、从内存读数据、执行算术运算、向内存写数据，以及更新程序计数器) 。
+这种方法通过重叠连续指令的步骤来获得高性能例如，在取一条指令的同时，执行它前面一条指令的算术运算。
+要做到这一点，要求能够事先确定要执行的指令序列，这样才能保持流水线中充满了待执行的指令。
+当机器過到条件跳转(也称为“ 分支”)时，只有当分支条件求值完成之后，才能决定分支往哪边走。
+处理器采用非常精密的分支预测逻 辑来猜測每条跳转指令是否会执行。
+只要它的猜測还比较可靠( 现代微处理器设计试图达 到90 %以上的成功率)，指令流水线中就会充满着指令。
+另一方面，错误预测一个跳转， 要求处理器丟掉它为该跳转指令后所有指令己做的工作，然后再开始用从正确位置处起始 的指令去填充流水线。
+正如我们会看到的，这样一个错误预測会招致很严重的惩罚，浪费 大约15 ~ 30个时钟周期，导致程序性能严重下降 。
+
+如何确定分支预测错误的处罚：
+假设顸测错误的概率是p，如果没有预测错误，执行代码的时间是Tox ，而预测错 误的处罚是TMP。
+那么，作为p的一个函数数，执行代码的平均时间是Tavg(p) = (1-p)Tok+p(Tok + Tmp)。
+如果已知Tok 和Tran(当p0. 5时的平均时间)，要确定Tmp。将参数代入等式，我们有Tran = Tavg(0. 5)=Tok十0. 5Tmp，
+所以有Tmp=2 (Tran—Tok)。因此，对于Tok=8和Tran=17.5，我们有Tmp=19。
+
+无论测试的依据是什么，编译出来使用条件传送的代码所需的时间都是大约8个时钟周期。控制流不依赖于数据，这使得处理器
+更容易保持流水线是满的。
+
+条件传送指令。当传送条件满足时，指令把源值S复制到目的R
+
+| 指令         | 同义名     | 传送条件         | 描述           |
+|------------|---------|--------------|--------------|
+| cmove S,R  | cmovz   | ZF           | 相等/零         |
+| cmovne S,R | cmovnz  | ~ZF          | 不相等/非零       |
+| cmovs S,R  |         | SF           | 负数           |
+| cmovns S,R |         | ~SF          | 非负数          |
+| comvg S,R  | comvnle | ~(SF^OF)&~ZF | 大于（有符号>）     |
+| cmovge S,R | comvnl  | ~(SF^OF)     | 大于或等于（有符号>=） |
+| comvl S,R  | comvnge | SF^OF        | 小于（有符号<）     |
+| comvle S,R | comvng  | (SF^OF)或ZF   | 小于或等于(有符号<=) |
+| comva S,R  | comvbe  | ~CF&~ZF      | 超过(无符号>)     |
+| comvae S,R | comvb   | ~CF          | 超过或相等(无符>=)  |
+| comvb S,R  | comvae  | CF           | 低于（无符号<）     |
+| comvbe S,R | comva   | CF或 ZF       | 低于或等于(无符号<=) |
+
+同条件跳转不同，处理器无需预测测试的结果就可以执行条件传送。处理器只是读源值（可能是从内存中），检查
+条件码，然后要么更新目的寄存器，要么保持不变。
+
+非法的强制汇编使用条件传送指令：
+```c++
+long created(long *xp)
+{
+  return (xp?*xp:0);
+}
+```
+乍一看，这段代码似乎很适合被编译成使用条件传送，当指针为空时将结果设置为0，如下面的汇编代码所示:
+```
+long created(long *xp)
+Invalid implementation of function created
+xp in register %rdi
+created:
+1  moveq (%rdi), %rax  // v = *xp
+2  testq %rdi, $rdi    // test x
+3  movl  $0, %eax      // set ve = 0
+4  comve %rdx,%rax     // if x == 0, v=ve
+5  ret
+```
+这个实现是非法的，因为即使当测试为假时，movq指令(第2行)对X 的间接引用 还是发生了，
+导致 一个间接引用空指针的错误。所以，必须用分支代码来编译这段代码。
+
+使用条件传送也不总是会提高代码的效率。如果求值需要大量的计算，那么当相对应的条件不满足时，这些工作就白费了。
+编译器必须考虑 浪费的计算和由于分支预测错误所造成的性能处罚之问的相对性能。
+说实话，编译器并不 具有足够的信息来做出可靠的决定;例奶，它们不知道分支会多好地遵循可预测的模式。
+对GCC 的实验表明，只有当两个表达式都很容易计算时，例如表达式分别都只是一条加法指令，它才会使用条件传送。
+即使许多分支预测错误的开销会超过更复杂的计算，GCC还是会使用条件控制转移。
+总的来说，条件数据传送提供 了一种用条件控制转移来实现条件操作的替代策略。它们只能用 于非常受限制的情况，但是这些情况还是相当常见的，而且与现代处理器 的运行方式更契合
+
+负数的整数
+```c++
+#define OP /
+long arith(long x)
+{
+  return x OP 8;
+}
+```
+
+```
+long arith(long x)
+x in %rdi
+arith:
+  leaq 7(%rdi), %rax  // 创建一个临时值x+7  temp = 想+ 7
+  testq %rdi, %rdi    // test x
+  comvns  %rdi, %rax  // if x >= 0,temp = x
+  sarq $3, %rax       // result = temp >> 3
+  435
+```
+
+#### 7. 循环
+
+
+#### 8. switch语句
+c语句代码
+```c
+void switch_eg(long x, long n, long *dest)
+{
+  long val = x;
+  switch(n) 
+  {
+    case 100:
+      val *= 13;
+      break;
+    case 102:
+      val += 10;
+      /*Fall through*/
+    case 103:
+      val +=  11;
+      break;
+    case 104:
+    case 106:
+      val *= val;
+      break;
+    default:
+      val = 0;
+  }
+  *dest = val;
+}
+```
+
+c语句跳表实现
+```c
+void switch_eg_impl(long x, long n, long *dest)
+{
+  /* Table of code pointers */
+  /* &&运算符创建一个指向代码位置的指针 */
+  static void *jt[7]={
+    &&loc_A, &&loc_def, &&loc_B,
+    &&loc_C, &&loc_D,&&loc_def,
+    &&loc_D
+  };
+  unsigned long index = n - 100;
+  long val;
+  if (index > 6)
+    goto loc_def;
+  /* Multiway branch */
+  goto *jt[index];
+  loc_A:
+    val = x * 13;
+    goto done;
+  loc_B:
+    x = x + 10;
+    /*Fall through*/
+  loc_C:
+    val = x + 11;
+    goto done;
+  loc_D:
+    val = x * x;
+    goto done;
+  loc_def:
+    val = 0;
+   done:
+    *dest = val;
+}
+```
+汇编代码
+汇编标识：
+loc_A : .L3
+loc_B : .L5
+loc_C : .L6
+loc_D : .L7
+loc_def : .L8
+```
+void switch_eg(long x, long n, long *dest)
+x in %rdi, n in %rsi, dest in %rdx
+
+switch_eg:
+    subq  $100, %rsi      // compute index = n - 100
+    comp $6, %rsi         // compare index:6
+    ja  .L8               // if >,goto loc_def
+    jmp *.L4(,%rsi, 8)    // goto *jt[index]
+  .L3:                          // loc_A
+    leaq (%rdi, %rdi, 2), %rax  // 3 * x
+    leaq (%rdi, %rax, 4), %rdi  // val = 13 * x
+    jmp .L2                     // goto done
+  .L5:                          // loc_B
+    addq $10, %rdi              // x = x + 10
+  .L6:                          // loc_C
+    addq $11, %rdi              // cal = x + 11
+    jmp .L2                     // goto done
+  .L7:                          // loc_D
+    imilq %rdi, %rdi            // val = x * x
+    jmp .L2                     // goto done
+  .L8:                          // loc_def:
+    movl $0, %edi               // val = 0
+  .L2:
+    movq %rdi, (%rdx)           // *dest = val
+    ret // return
+```
+
+跳转表汇编：
+```
+    .section .rodata
+    .align 8  // Align address to multiple of 8  
+  .L4:
+    .quad .L3 // case 100:loc_A
+    .quad .L8
+    .quad .L5
+    .quad .L6
+    .quad .L7
+    .quad .L8
+    .quad .L7
+
+```
+.rodata 只读数据
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
