@@ -443,6 +443,333 @@ linux>gcc -o prog21 main2.c ./libvector.so
 用户对GCC使用-fpic选项指示GNU编译系统生成PIC代码。共享库的编译必须总是使用该选项。
 
 ### 1. PIC数据引用
+编译器通过运用以下这个有趣的事实来生成对全局变量的PIC引用:无论我们在内存中的何处加载一个目标模块
+(包括共享目标模块)，数据段与代码段的距离总是保持不变。因此，代码段中任何指令和数据段中任何变量之
+间的距离都是一个运行时常量，与代码段和数据段的绝对内存位置是无关的。
+
+想要生成对全局变量PIC引用的编译器利用了这个事实，它在数据段开始的地方创建了一个表，叫做全局偏移量表
+(Global Offset Table,GOT)。在GOT中，每个被这个目标模块引用的全局数据目标(过程或全局变量)都有一
+个8字节条目。编译器还为GOT中每个条目生成一个重定位记录。在加载时，动态链接器会重定位GOT中的每个条目，
+使得它包含目标的正确的绝对地址。每个引用全局目标的目标模块都有自己的GOT。
+
+### 2. PIC函数调用
+假设程序调用一个由共享库定义的函数。编译器没有办法预测这个函数的运行时地址，因为定义亡的共享模块在
+运行时可以加载到任意位置。正常的方法是为该引用生成一条重定位记录，然后动态链接器在程序加载的时候再
+解析它。不过，这种方法并不是PIC，因为它需要链接器修改调用模块的代码段，GNU编译系统使用了一种很有趣
+的技术来解决这个问题，称为`延迟绑定(lazy binding)`，将过程地址的绑定推迟到第一次调用该过程时。
+
+使用延迟绑定的动机是对于一个像libc.so这样的共享库输出的成百上千个函数中，一个典型的应用程序只会使用
+其中很少的一部分。把函数地址的解析推迟到它实际被调用的地方，能避免动态链接器在加载时进行成百上千个
+其实并不需要的重定位。第一次调用过程的运行时开销很大，但是其后的每次调用都只会花费一条指令和一个间
+按的内存引用。
+
+延迟绑定是通过两个数据结构之间简洁但又有些复杂的交互来实现的，这两个数据结构是:GOT和过程链接表
+(Procedure Linkage Table，PLT)。如果一个目标模块调用定义在共享库中的任何函数，那么它就有自己
+的GOT和PLT。GOT是数据段的一部分，而PLT是代码段的一部分。
+
+- 过程链接表(PLT)。PLT是一个数组，其中每个条目是16字节代码。PLT[O1]是一个特殊条目，它跳转到动态链接器
+中。每个被可执行程序调用的库函数都有它自己的PLT条目。每个条目都负责调用一个具体的函数。PIT[1]调用系统
+启动函数(__libc_start_main)，它初始化执行环境，调用main函数并处理其返回值。从PIT[2]开始的条目调用
+用户代码调用的函数。
+- 全局偏移量表(GOT)。正如我们看到的，GOT是一个数组，其中每个条目是8宇节地址。和PLT联合使用时，GOT[O]
+和GOT[1]包含动态链接器在解析函数地址时会使用的信息。GOT[2]是动态链接器在ld-linux.so模块中的入口点。
+其余的每个条目对应于一个被调用的函数，其地址需要在运行时被解析。每个条目都有一个相匹配的PLI条目。
+例如，GOT[4]和PLT[2]对应于addvec。初始时，每个GOT条目都指向对应PLT条目的第二条指令。
+
+
+例子a
+```
+// 数据段  全局偏移量表（GOT）
+GOT[0]: addr of .dynamic
+GOT[1]: addr of reloc entries
+GOT[2]: addr of dynamic linker
+GOT[3]: 0x4005b6 # sync startup
+GOT[4]: 0x4005b6 # addvec()
+GOP[6]: 0x4005b6 # printf()
+
+// 代码段
+callq 0x4005c0 # call addvec()
+// 过程链接表(PLT)
+# PLT[0]: call dynamic linker
+4005a0: pushq *GOT[1]
+4005a6: jmpq *GOP[2]
+...
+#PLT[2]: call addvec()
+4005c0: jmpq *GOP[4]
+4005c6: pushq $0x1
+4005cb: jmpq 4005a0
+```
+
+例子b
+```
+// 数据段  全局偏移量表（GOT）
+// 数据段  全局偏移量表（GOT）
+GOT[0]: addr of .dynamic
+GOT[1]: addr of reloc entries
+GOT[2]: addr of dynamic linker
+GOT[3]: 0x4005b6 # sync startup
+GOT[4]: &addvec()
+GOP[6]: 0x4005b6 # printf()
+
+// 代码段
+callq 0x4005c0 # call addvec()
+// 过程链接表(PLT)
+# PLT[0]: call dynamic linker
+4005a0: pushq *GOT[1]
+4005a6: jmpq *GOP[2]
+...
+#PLT[2]: call addvec()
+4005c0: jmpq *GOP[4]
+4005c6: pushq $0x1
+4005cb: jmpq 4005a0
+```
+
+例子a展示了GOP和PLT如何协同工作，在第一次addvec被调用时，延迟解析它的运行地址：
+- 不直接调用addvec，程序调用进人PIT[2〕，这是addvec的PLT条目
+- 第一条PLT指令通过GOT[4]进行间接跳转。因为每个GOT条目初始时都指向它对应的GLT条日的第二条指令，
+这个间接跳转只是简单地把控制传送回PIT[2]中的下一条指令。
+- 在把addvec的ID(0x1)压人栈中之后，PLT[2]跳转到PLT[0]。
+- PII[O]通过GOT[1]间接地把动态链接器的一个参数压入栈中，然后通过GOT[2]间接跳转进动态链接器中。
+动态链接器使用两个栈条目来确定addvec的运行时位置，用这个地址重写GOT[4]，再把控制传递给addvec。
+
+例子b给出的是后续在调用addvec时的控制流：
+- 和前面一样，控制传递到PLT[2]
+- 不过这次通过GOT[4]的间接跳转会将控制直接转移到addvec
+
+## 13. 库打桩机制
+Linux链接器支持一个很强大的技术，称为`库打桩(library interpositioning)``，它允许你截获对共享库函数
+的调用，取而代之执行自己的代码。使用打桩机制，你可以追踪对某个特殊库函数的调用次数，验证和追踪它的输入
+和输出值，或者甚至把它替换成一个完全不同的实现。
+
+下面是它的基本思想:给定一个需要打桩的`目标函数`，创建一个`包装函数`，它的原型与目标函数完全一样。
+使用某种特殊的打桩机制，你就可以欺骗系统调用包装函数而不是目标函数了。包装函数通常会执行它自己的逻
+辑，然后调用目标函数，再将目标函数的返回值传递给调用者。
+
+
+
+### 1. 编译时打桩
+int.c
+```c
+#include<stdio.h>
+#include<malloc.h>
+
+int main()
+{
+    int *p = malloc(32);
+    free(p);
+    return (0);
+}
+```
+
+malloc.h
+```c
+#define malloc(size) mymalloc(size)
+#define free(ptr) myfree(ptr)
+
+void *mymalloc(size_t size);
+void myfree(void *ptr)
+```
+
+malloc.c
+```c
+#ifdef COMPILETIME
+#include<stdio.h>
+#include<malloc.h>
+
+/* malloc wrapper function*/
+void *mymalloc(size_t size)
+{
+    void *ptr = malloc(size);
+    printf("malloc(%d)=%p\n", (int)size, ptr);
+    return ptr;
+}
+/* free wrapper function*/
+void myfree(void *ptr)
+{
+    free(ptr);
+    printf("free(%p)\n", ptr);
+}
+
+#endif
+```
+
+mymal1oc.c中的包装函数调用目标函数，打印追踪记录，并返回。本地的malloc.h头文件指示预处理器
+用对相应包装函数的调用替换掉对目标函数的调用。像下面这样编译和链接这个程序:
+
+linux>gcc -DCOMPILETIME -c mymalloc.c
+
+linux>gcc -I. -o intc int.c mymalloc.o
+
+由于有-I.参数，所以会进行打桩，它告诉C预处理器在搜索通常的系统目录之前，先在当前目录中查找malloc.h。
+注意，mymalloc.c中的包装函数是使用标准malloc.h头文件编译的.
+
+运行这个程序会得到如下的追踪信息:
+
+linux>./intc
+
+malloc(32)=0x9ee010
+
+free(0x9ee010)
+
+### 2. 链接时打桩
+Linux静态链接器支持用--wrap_f标志进行链接时打桩。这个标志告诉链接器，把对符号f的引用解析成__wrap_f
+(前级是两个下划线)，还要把对符号__real_f(前级是两个下划线)的引用解析为f。图7-21给出我们示例程序的包装函数。a
+
+malloc.c
+```c
+#ifdef LINKTIME
+#include<stdio.h>
+
+void *__real_malloc(size_t size);
+void __real_free(void *ptr)
+
+/* malloc wrapper function*/
+void *mymalloc(size_t size)
+{
+    void *ptr = __real_malloc(size);    /*call libc malloc*/
+    printf("malloc(%d)=%p\n", (int)size, ptr);
+    return ptr;
+}
+/* free wrapper function*/
+void myfree(void *ptr)
+{
+    __real_free(ptr);   /*call libc free*/
+    printf("free(%p)\n", ptr);
+}
+
+#endif
+```
+用上述方法把这些源文件编译成可重定位目标文件:
+
+linux>gcc -DLINKTIME -c mymalloc.c
+
+linux>gcc -c int.c
+
+然后把目标文件链接成可执行文件：
+
+linux>gcc -Wl,--warp,malloc -Wl,--warp,free -o intl int.o mymalloc.o
+
+-WI,option标志把option传递给链接器。option中的每个逗号都要替换为一个空格，所以-Wl,--warp,malloc
+就把--warp malloc传递给链接器以类似的方式传递给-Wl,--warp,free。
+
+- -Wl：这个选项告诉 gcc 将后面的选项传递给链接器。gcc 本身既是编译器也是链接器的前端，
+而 -Wl 选项用于指定链接器（ld）的选项。
+- --wrap,malloc 和 --wrap,free：这些是链接器的特定选项。--wrap 选项用于替换库调用。
+例如，使用 --wrap,malloc 会导致程序中对 malloc 函数的所有调用都被替换为对 __wrap_malloc
+的调用。同样，--wrap,free 会替换所有的 free 调用为 __wrap_free。这通常用于调试、监控或替换标准库函数。
+
+### 3. 运行时打桩
+编译时打桩需要能够访问程序的源代码，链接时打桩需要能够访问程序的可重定位对象文件。
+不过，有一种机制能够在运行时打桩，它只需要能够访问可执行目标文件。这个很厉害的机制
+基于动态链按器的LD_PRELOAD环境变量。 
+
+如果LD_PRELOAD环境变量被设置为一个共享库路径名的列表(以空格或分号分隔)，那么当你
+加载和执行一个程序，需要解析未定义的引用时， 动态链接器(LD-Linux.SO)会先搜索LD_PRELOAD库，
+然后才搜素任何其他的库。有了这个机制，当你加载和执行任意可执行文件时，可以对任何共享库中的任何
+函数打桩，包括libc.so。
+
+
+malloc.c
+```c
+#ifdef RUNTIME
+#deine _GUN_SOURCE
+#include<stdio.h>
+#include<stdlib.h>
+#include<dlfcn.h>
+
+/* malloc wrapper function*/
+void *mymalloc(size_t size)
+{
+    void *(mallocp)(size_t size);
+    char *error;
+
+    mallocp = dlsym(RTLD_NEXT, "malloc");/* Get address of libs malloc */
+    if ((error = dlerror()) != NULL)
+    {
+        fpits(error, stderr);
+        exit(1);
+    }
+
+    char *ptr = mallocp(size);    /*call libc malloc*/
+    printf("malloc(%d)=%p\n", (int)size, ptr);
+    return ptr;
+}
+/* free wrapper function*/
+void myfree(void *ptr)
+{
+    void (*freep)(void*) = NULL;
+    char *error;
+    if (!ptr)
+        return;
+    freep = dlsym(RTLD_NEXT, "free"); /* Get address of libc free */
+    if ((error = dlerror()) != NULL )
+    {
+        fputs(error, stderr);
+        exit(1);
+    }
+    freep(ptr);   /*call libc free*/
+    printf("free(%p)\n", ptr);
+}
+
+#endif
+```
+构建包含这些包装函数的共享库的方法：
+
+linux>gcc -DRUNTIME - shared -fpic -o mymalloc.so mymalloc.c -ldl
+
+如何编译主程序：
+
+linux>gcc -o intr int.c
+
+从bash_shell运行程序:
+
+linux>LD_PRELOAD="./mymalloc.so" ./intr
+
+malloc(32) = 0x1bf7010
+
+free(0x1bf7010)
+
+## 14. 处理目标文件的工具
+在Linux系统中有大量可用的工具可以帮助你理解和处理目标文件。特别地，
+GNU binutils包尤其有帮助，而且可以运行在每个Linux平台上。
+
+- AR:创建静态库，插人、删除、列出和提取成员。
+- STRINGS:列出一个目标文件中所有可打印的字符串。
+- STRIP:从目标文件中删除符号表信息。
+- NM:列出一个目标文件的符号表中定义的符号。
+- SIZE:列出目标文件中节的名字和大小。
+- READELF:显示一个目标文件的完整结构，包括ELF头中编码的所有信息。包含SIZE和NM的功能。
+- OBJDUMP:所有二进制工具之母。能够显示一个目标标文件中所有的信息。它最大的作用是反汇编.text节中的二进制指令。
+Linux系统为操作共享库还提供了LDD程序:
+- LDD:列出一个可执行文件在运行时所需要的共享库。
+
+## 15. 小结
+链接可以在编译时由静态编译器来完成，也可以在加载时和运行时由动态链接器来完成。
+链接器处理称为目标文件的二进制文件，它有3种不同的形式:可重定位的、可执行的和共享的。
+可重定位的目标文件由静态链接器合并成一个可执行的目标文件，它可以加载到内存中并执行。
+共享目标文件(共享库)是在运行时由动态链接器链接和加载的，或者隐含地在调用程序被加载和
+开始执行时，或者根据需要在程序调用dlopen库的两数时。
+
+链接器的两个主要任务是符号解析和重定位，符号解析将目标文件中的每个全局符号都绑定到一个唯一的定义，
+而重定位确定每个符号的最终内存地址，并修改对那些目标的引用。
+
+静态链接器是由像GCC这样的编译驱动程序调用的。它们将多个可重定位目标文件合并成一个单独的可执行目标文件。
+至个目标文件可以定义相同的符号，而链接器用来悄悄地解析这些多重定义的规则可能在用户程序中引人微妙的错误。
+
+多个目标文件可以被连接到一个单独的静态库中。链接器用库来解析其他目标模块中的符号引用。
+许多链接器通过从左到右的顺序扫描来解析符号引用，这是另一个引起令人迷惑的链接时错误的来源。
+
+加载器将可执行文件的内容映射到内存，并运行这个程序。链接器还可能生成部分链接的可执行目标文件，
+这样的文件中有对定义在共享库中的例程和数据的末解析的引用。在加载时，加载器将部分链接的可执行
+文件映射到内存，然后调用动态链接器，它通过加载共享库和重定位程序中的引用来完成链接任务。
+
+被编译为位置无关代码的共享库可以加载到任何地方，也可以在运行时被多个进程共享。
+为了加载、链接和访问共享库的函数和数据，应用程序也可以在运行时使用动态链接器。
+
+
+
+
+
 
 
 
