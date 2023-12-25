@@ -1,10 +1,8 @@
 ---
-title: "I/O复用select和poll函数"
+title: "I/O模型"
 date: 2023-12-22T15:47:33+08:00
 draft: true
 ---
-
-# I/O 复用：select和poll函数
 
 ## 1. I/O模型
 unix下可用的5种I/O模型基本区别：
