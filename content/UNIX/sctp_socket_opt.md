@@ -302,7 +302,7 @@ struct sctp_status
 接字缓冲区正在变满，这一点又可用作让应用进程尽可能降低发送速率的信号。有些应用进程使用sstat_fragmentation_point
 减少SCTP不得不创建的片段数量，办法就是发送较小的应用消息。
 
-
+![](https://raw.githubusercontent.com/lsill/gitLink/main/document/photo/note/unix/7_19.jpg)
 
 
 
