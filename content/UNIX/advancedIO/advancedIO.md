@@ -315,7 +315,113 @@ I/O流的便利性大过对缓冲带来的bug的担优时，在套接字上使�
 
 ## 9. 高级轮询技术
 
-1. /dev/poll接口
+### 1. /dev/poll接口
+Solaris上名为/dev/poll的特殊文件提供了一个可扩展的轮询大量描述符的方法。select和poll存在的一个问题是，每次调用
+它们都得传递待查询的文件描述符。轮询设备能在调用维持状态，因此轮询进程可以预先设置好待查询描述符的列表，然后进入一个
+循环等待事件发生，每次循环回来时不必再次设置该列表。
+   
+打开/dev/poll之后，轮询进程必须先初始化一个pollfd结构(即poll函数使用的结构，不过本机制不使用其中的revents成员)
+数组，再调用write往/dev/poll设备上写这个结构数组以把它传递给内核，然后执行ioctl的DP_POLL命令阻塞自身以等待事件
+发生。传递给ioctl调用的结构如下:
+```
+struct dvpoll{
+   struct pollfd* dp_fds;
+   int dp_nfds;
+   int dp_timeout;
+}
+```
+其中dp_fds成员指向一个缓冲区，供ioctl在返回时存放一个pollfd结构数组。dp_nfds成员指定该缓冲区的大小。ioctl调用将
+一直阻塞到任何一个被轮询描述符上发生所关心的事件，或者流逝时间超过经由dp_timeout成员指定的毫秒数为止。dp_timeout
+指定为0将导致ioctl立即返回，从而提供了使用本接口的非阻塞手段。dp_timeout指定为-1表示没有超时设置。
+[/etc/poll](https://github.com/lsill/unpvnote/blob/main/advio/str_cli_poll03.c?plain=1#L4)
+
+### 1. kqueue 接口
+FreeBSD随4.1版本引入了kqueue接口。本接又允许进程向内核注册描述所关注kqueue事件的事件过滤器(event filter)。事件
+除了与select所关注类似的文件I/O和超时外，还有异步I/O、文件修改通知(例如文件被删除或修改时发出的通知)、进程跟踪(例如
+进程调用exit或fork时发出的通知)和信号处理。kqueue接口包括如下2个函数和1个宏。
+```c
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+int kgueue(void);
+int kevent(int kq,const struct kevent *changelist, int nchanges, struct kevent *eventlist,int nevents, const struct timespec *timeout);
+void EV_SET(struct kevent *kev,uintptr_t ident,short filter, u_short flags,u_int flags,intptr_t data,void* udata);
+```
+kqueue函数返回一个新的kqueue描述符，用于后续的kevent调用中。kevent函数既用于注册所关注的事件，也用于确定是否有所关注
+事件发生。changelist和nchanges这两个参数给出对所关注事件做出的更改，若无更改则分别取值NULL和0。如果nchanges不为0，
+kevent函数就执行changelist数组中所请求的每个事件过滤器更改。其条件已经触发的任何事件(包括刚在changelist中增设的那些事件)
+由kevent函数通过eventlist参数返回，它指向一个由nevents个元素构成的kevent结构数组。kevent函数在eventist中返回的事件数
+目作为的数返回值返回，0表示发生超时。超时通过timeout参数设置，其处理类似select:NULL阻塞进程，非0值timespec指定明确的超时
+值，0值timespec执行非阻塞事件检查。注意，kevent使用的timespec结构不同于select使用的timeval结构，前者的分辨率为纳秒，后
+者的分辦率为微秒。
+
+kevent结构在头文件<sys/event.h>中定义:
+```c
+struct kevent{
+    uintptr_t ident; /*identifier (e.g.,file descriptor) */
+    short filter; /*filter type(e.g.,EVFILT_READ) */
+    ushort flags;   /*action flags(e.g.,EV_ADD)*/
+    u_int fflags;   /*filter-specific flags*/
+    intptr_t data;  /*filter-specific sdata*/
+    void *udata;    /*opaque user data*/
+}
+```
+其中flags成员在调用时指定过滤器更改行为，在返回时额外给出系件，如图14-16所示
+![](https://raw.githubusercontent.com/lsill/gitLink/main/document/photo/note/unix/14_16.jpg)
+filter成员指定的过滤器类型如图14-17所示
+![](https://raw.githubusercontent.com/lsill/gitLink/main/document/photo/note/unix/14_17.jpg)
+[kqueue](https://github.com/lsill/unpvnote/blob/main/advio/str_cli_kqueue04.c?plain=1#L4)
+
+## 10 T/TCP:事务目的TCP
+T/TCP是对TCP进行过略微修改的一个版本，能够避免近来彼此通信过的主机之间的三路握手。
+
+T/TCP能够把SYN、FIN和数据组合到单个分节中，前提是数据的大小小于MSS。图14-19展示最小TCP事务的时间线。第一个分节
+是由客户的单个sendto调用产生的SYN、FIN和数据。该分节组合了connect、write和shutdown共三个调用的功能。服务器
+执行通常的套接字函数调用步骤:socket、bind、listen和accept，其中后者在客户的分节到达时返回。服务器用send发回其
+应答并关闭套接字。这使得服务器在同一个分节中向客户发出SYN、FIN和应答。比较TCP，我们看到不仅需在网络中传输的分节有
+所减少(T/TCP需3个，TCP需10个，UDP需2个〉，而且客户从初始化连接到发送一个请求再到读取相应应答所花费的时间也滅少了
+一个RTT。
+![](https://raw.githubusercontent.com/lsill/gitLink/main/document/photo/note/unix/14_19.jpg)
+T/TCP的优势在于TCP的所有可靠性(序列号、超时、重传，等等)得以保留，而不像UDP那样把可靠性推给应用程序去实现。
+T/TCP同样维持TCP的慢启动和拥塞避免措施，UDP应用程序却往往缺乏这些特性。
+
+为了处理T/TCP，套接字API需作些变动。在提供T/TCP的系统上TCP应用程序无需任何改动，除非要使用T/TCP的特性。所有现有
+TCP应用程序继续使用我们己经讲述过的套接字API工作。
+- 客户调用sendto，以便把数据的发送结合到连接的建立之中。该调用替换单独的connect调用和write调用。服务器的协议地址
+改为传递给sendto而不是connect。
+- 新增一个输出标志MSG_EOF(参见图14-6)，用于指示本套接字上不再有数据待发送。该标志允许我们把shutdown调用结合到
+输出操作(send或sendto)之中。给一个sendto调用同时指定本标志和服务器的协议地址有可能导致发送单个含有SYN、FIN和
+数据的分节。我们还在图14-19中指出，服务器发送应答使用的是send而不是write，其原因在于为了指定MSG_BOP标志，以便
+随应答一起发送FIN。〔不要把这个新标志与己有的MSG_EOR标志混为一谈，后者为面向记录的协议指示记录结束条件)。
+- 新定义一个级别为IPPROTO_TCP的套接字选项TCP_NOPUSH。本选项防止TCP只为腾空套接字发送缓冲区而发送分节。当某个
+客户准备以单个sendto发送一个请求时，如果该请求大小超过MSS，它就应该为相应套接字设置本选项，以减少所发送分节的数目。
+- 想跟一个服务器建立连接并且使用T/TCP发送一个请求的客户应该调用socket、setsockopt(开启TCP_NOPUSH选项)和sendto
+(若只有一个请求待发送则指定MSG_EOF标志)。如果setsockopt返回ENVOPROTOOPT错误或者sendto返回ENOICONN错误，那么
+本主机不支持T/TCP。这种情况下容户可以干脆调用connect和write，加上可能后跟的shutdown(如果只有一个请求待发送)。
+- 服务器所需的唯一变动是，如果服务器想随应答一起发送FIN，它就应该指定MSG_EOF标志调用send以发送应答，而不是调用write以发送应答。
+- T/TCP的编译时测试可以使用伪代码#ifdef MSG_FOF。
+
+## 11. 小结
+在套接字操作上设置时间限制的方法有三个:
+- 使用alarm函数和SIGALRX信号;
+- 使用由select提供的时间限制:
+- 使用较新的SO_RCVTIMEO和SO_SNDTIMEO套接字选项。
+
+第一个方法易于使用，不过涉及信号处理，而信号处理可能导致竞争条件。使用select意味着我们阻塞在指定过时间限制的这个函数上，而
+不是阻塞在read、write或connect调用上。第三个方法也易于使用，不过并非所有实现都提供。
+
+recvmsg和sendmsg是所提供的5组I/O函数中最为通用的。它们组合了如下能力:指定MSG_xxx标志(出自recv和send)，返回或指定对端的
+协议地址(出自recvfrom和sendto)，使用多个缓冲区(出自readv和writev)。此外还增加了两个新的特性:给应用进程返回标志，接收或发送辅助数据。
+
+我们在文中讲述了10种不同格式的辅助数据，其中6种是随IPv6新定义的。辅助数据由一个或多个辅助数据对象构成，每个对象都以一个cmsghdr
+结构打头，它指定数据的长度、协议级别及类型。5个以CMSC_打头的函数可用于构建和分析辅助数据。
+
+C标准I/O函数库也可以用在套接字上，不过这么做将在己经由TCP提供的缓冲级别之上新增一级缓冲。实际上，对由标准I/O函数库执行的级冲缺乏了解是
+使用这个函数库最常见的问题。既然套接字不是终端设各，这个潜在问题的常用解决办法就是把标准I/O流设置成不缓冲，或者干脆不要在套接字上使用标准I/O。
+
+许多厂家提供轮询大量事件却没有select和poll所需开销的高级方法。尽管应该避免编写不可移植的代码，有时候性能改善的收益会重于不可移植造成的风险。
+T/TCP是对TCP的一个简单增强版本，能够在客户和服务器近来彼此通信过的前提下避免三路握手，使得服务器对于客户的请求更快地给出应答。从编程角度看，
+客户通过调用sendto而不是通常的connect、write和shutdown调用序列发择T/TCP的优势。
 
 
 
