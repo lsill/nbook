@@ -4,4 +4,6 @@
 #### 3. [非阻塞connect](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L105)
 #### 4. [非阻塞connect:时间获取客户程序](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L122)
 #### 5. [非阻塞connect:Web客户程序](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L150)
-#### 5. [非阻塞accept](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L185)
+#### 6. [非阻塞accept](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L185)
+#### 7. [小结](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L222)
+#### [习题](https://github.com/lsill/nbook/blob/main/content/UNIX/UNP/%20non-blocking-IO.md?plain=1#L232)
